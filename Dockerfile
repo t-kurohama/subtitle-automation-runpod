@@ -3,6 +3,8 @@ FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Tokyo
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     libsndfile1-dev \
     libsox-dev \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directory
