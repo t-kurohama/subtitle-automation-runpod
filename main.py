@@ -336,9 +336,17 @@ async def process_subtitle(
     try:
         # Parse settings
         settings_data = json.loads(settings)
-        process_settings = ProcessSettings(**settings_data)
-        
-        logger.info(f"Processing file: {file.filename} with settings: {settings_data}")
+
+        # Debug logging
+        logger.info(f"Received settings: {settings_data}")
+
+        # Create ProcessSettings with explicit mapping
+        process_settings = ProcessSettings(
+            speakerCount=settings_data.get("speakerCount", 2),
+            language=settings_data.get("language", "ja")
+        )
+
+        logger.info(f"Processing file: {file.filename} with settings: {process_settings}")
         
         # Save uploaded file
         input_path = f"/app/uploads/{file.filename}"
@@ -416,4 +424,5 @@ async def process_subtitle(
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
