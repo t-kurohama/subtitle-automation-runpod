@@ -9,7 +9,7 @@ soundfile==0.12.1
 # ---- NLP/HF 周辺 ----
 transformers==4.41.2
 accelerate==0.30.1
-tokenizers==0.15.2
+tokenizers==0.19.1
 
 # ---- サーバ/ユーティリティ ----
 runpod==1.6.1
@@ -24,3 +24,4 @@ numpy<2.0
 scipy==1.11.4
 matplotlib==3.8.2
 pyannote.core==5.0.0
+
