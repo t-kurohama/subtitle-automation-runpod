@@ -1,43 +1,18 @@
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
+FROM runpod/pytorch:2.3.1-py3.10-cuda12.1
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Tokyo
+# OS 依存
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    git \
-    wget \
-    curl \
-    libsndfile1-dev \
-    libsox-dev \
-    tzdata \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# 先に torch 系を入れる（ここで失敗すれば原因が即わかる）
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel
+RUN pip install --extra-index-url https://download.pytorch.org/whl/cu121 \
+    torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121
 
-# Copy application code
+# 残りを一括
+RUN pip install -r requirements.txt
+
 COPY . .
-
-# Create necessary directories
-RUN mkdir -p /app/uploads /app/outputs /app/temp
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["python", "-u", "main.py"]
