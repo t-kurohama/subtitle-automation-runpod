@@ -15,8 +15,8 @@ RUN pip install --upgrade pip setuptools wheel && \
     pip install "numpy<2"
 
 # 2) tokenizers を wheels 強制で先に入れておく（ソースビルド回避）
-RUN pip install --only-binary=:all: "tokenizers==0.15.2" || \
-    pip install --only-binary=:all: "tokenizers==0.13.3"
+RUN pip install --only-binary=:all: "tokenizers==0.19.1" || \
+    pip install --only-binary=:all: "tokenizers==0.19.0"
 
 # 3) 残りを一括
 RUN pip install -r requirements.txt
@@ -24,3 +24,4 @@ RUN pip install -r requirements.txt
 # アプリ本体
 COPY . .
 CMD ["python", "-u", "main.py"]
+
