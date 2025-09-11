@@ -1,31 +1,32 @@
-# FastAPI and server
+# ---- PyTorch (CUDA 12.1 wheels) ----
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.3.1+cu121
+torchvision==0.18.1+cu121
+torchaudio==2.3.1+cu121
+
+# ---- WhisperX & 依存 ----
+whisperx==3.1.1
+faster-whisper==1.0.3
+pyannote.audio==3.1.1
+ffmpeg-python==0.2.0
+librosa==0.10.2.post1
+soundfile==0.12.1
+
+# ---- NLP/HF 周辺（相性安定版）----
+transformers==4.41.2
+accelerate==0.30.1
+tokenizers==0.15.2
+
+# ---- サーバ/ユーティリティ ----
+runpod==1.6.1
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 pydantic==2.5.0
-
-# Audio processing
-whisperx==3.1.1
-torch==2.1.0
-torchaudio==2.1.0
-librosa==0.10.1
-soundfile==0.12.1
-ffmpeg-python==0.2.0
-
-# Speaker diarization
-pyannote.audio==3.1.1
-pyannote.core==5.0.0
-
-# File handling
 aiofiles==23.2.0
 python-dotenv==1.0.0
-
-# Utilities
-numpy==1.24.3
+requests==2.31.0
+numpy<2.0
 scipy==1.11.4
 matplotlib==3.8.2
-requests==2.31.0
-
-# GPU support (optional, auto-detected)
-# nvidia-cublas-cu11
-# nvidia-cudnn-cu11
+pyannote.core==5.0.0
