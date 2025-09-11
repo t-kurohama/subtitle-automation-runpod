@@ -1,8 +1,4 @@
---extra-index-url https://download.pytorch.org/whl/cu121
-torch==2.3.1+cu121
-torchvision==0.18.1+cu121
-torchaudio==2.3.1+cu121
-
+# ---- WhisperX & 依存 ----
 whisperx==3.1.1
 faster-whisper==1.0.3
 pyannote.audio==3.1.1
@@ -10,10 +6,12 @@ ffmpeg-python==0.2.0
 librosa==0.10.2.post1
 soundfile==0.12.1
 
+# ---- NLP/HF 周辺 ----
 transformers==4.41.2
 accelerate==0.30.1
 tokenizers==0.15.2
 
+# ---- サーバ/ユーティリティ ----
 runpod==1.6.1
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
