@@ -1,124 +1,124 @@
-# --- env ---
-import os
-os.environ["HF_HOME"] = "/tmp/hf-cache"
-os.environ["TRANSFORMERS_CACHE"] = "/tmp/hf-cache"
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-
-import runpod, base64, tempfile, subprocess, shutil, pathlib, time
-try:
-    import requests
-except Exception:
-    requests = None
-
-# --- model (global once) ---
+import os, sys, time, io, base64, tempfile, subprocess, shutil
 from faster_whisper import WhisperModel
+from runpod.serverless import start
 
-MODEL_DEFAULT = "tiny"
-_MODELS = {}
-def get_model(size: str):
-    size = size or MODEL_DEFAULT
-    if size not in _MODELS:
-        # GPUを使えないと遅いのでfloat16優先、失敗時はint8にフォールバック
-        try:
-            _MODELS[size] = WhisperModel(size, device="cuda", compute_type="float16", download_root="/tmp/hf-cache")
-            _MODELS[size]._compute_type = "float16"
-        except Exception:
-            _MODELS[size] = WhisperModel(size, device="cuda", compute_type="int8", download_root="/tmp/hf-cache")
-            _MODELS[size]._compute_type = "int8"
-    return _MODELS[size]
+# ---------- ログ関数 ----------
+def log(msg):
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
 
-# 既定モデルを先読み（warmなしでも軽くする）
-_MODELS[MODEL_DEFAULT] = get_model(MODEL_DEFAULT)
+# ---------- 起動時の環境確認 ----------
+log("=== boot ===")
+try:
+    import torch
+    log(f"python={sys.version.split()[0]} "
+        f"torch={getattr(torch,'__version__','?')} "
+        f"cuda={getattr(torch,'cuda',None) and torch.cuda.is_available()}")
+except Exception as e:
+    log(f"torch import error: {e}")
 
-def handler(event):
-    t0 = time.time()
-    inp = (event or {}).get("input", {}) or {}
+FFMPEG = os.environ.get("FFMPEG_BIN", shutil.which("ffmpeg") or "ffmpeg")
+log(f"ffmpeg bin={FFMPEG}")
+try:
+    v = subprocess.run([FFMPEG, "-version"],
+                       capture_output=True, text=True, timeout=5)
+    log("ffmpeg version: " + v.stdout.splitlines()[0])
+except Exception as e:
+    log(f"ffmpeg version check error: {e}")
 
-    # ping
-    if inp.get("ping"):
-        return {"ok": True, "pong": True}
+# ---------- Whisperモデル準備 ----------
+MODEL_SIZE = os.environ.get("MODEL_SIZE", "tiny")
+DEVICE = os.environ.get("WHISPER_DEVICE", "auto")  # "cuda"/"cpu"/"auto"
+_model = None
 
-    # warm（指定サイズをロードだけ）
-    if "warm" in inp:
-        sz = inp.get("warm") or MODEL_DEFAULT
-        get_model(sz)
-        return {"ok": True, "warmed": sz}
+def get_model():
+    global _model
+    if _model is None:
+        t0 = time.time()
+        log(f"WhisperModel init start size={MODEL_SIZE} device={DEVICE}")
+        compute = "float16" if DEVICE == "cuda" else "int8"
+        _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=compute)
+        log(f"WhisperModel init done in {time.time()-t0:.2f}s (compute={compute})")
+    return _model
 
-    # 入力チェック
-    if "file" not in inp and "url" not in inp:
-        return {"status":"error","message":"input.url または input.file (base64) が必要です"}
-    if "url" in inp and requests is None:
-        return {"status":"error","message":"requests が未インストール"}
+# ---------- 入力処理 ----------
+def decode_input(input_dict):
+    if "file" in input_dict:
+        log("Input route: base64")
+        raw = base64.b64decode(input_dict["file"])
+        f = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
+        f.write(raw); f.close()
+        return f.name
+    elif "url" in input_dict:
+        url = input_dict["url"]
+        log(f"Input route: url ({url[:80]}...)")
+        dst = tempfile.NamedTemporaryFile(delete=False, suffix=".bin"); dst.close()
+        cmd = ["curl", "-L", "-sS", url, "-o", dst.name, "--max-time", "60"]
+        log("RUN " + " ".join(cmd))
+        cp = subprocess.run(cmd, capture_output=True, text=True)
+        if cp.returncode != 0:
+            log("curl stderr: " + (cp.stderr or "").splitlines()[-1]
+                if cp.stderr else "no-stderr")
+            raise RuntimeError(f"curl failed rc={cp.returncode}")
+        return dst.name
+    else:
+        raise ValueError("input.file or input.url is required")
 
-    model_size = inp.get("model") or MODEL_DEFAULT
-    lang = (inp.get("settings", {}) or {}).get("language", "ja")
-
-    workdir = tempfile.mkdtemp(prefix="rp_"); phase = {}
+# ---------- ffmpeg変換 ----------
+def to_wav16k_mono(src_path, timeout_sec=90):
+    out = tempfile.NamedTemporaryFile(delete=False, suffix=".wav"); out.close()
+    cmd = [FFMPEG, "-hide_banner", "-nostdin", "-y", "-i", src_path,
+           "-ac", "1", "-ar", "16000", "-map_metadata", "-1",
+           "-vn", "-sn", "-dn", out.name]
+    log("FFMPEG RUN " + " ".join(cmd))
     try:
-        src_path = pathlib.Path(workdir) / (inp.get("filename") or "input.bin")
+        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        log("FFMPEG TIMEOUT")
+        raise
+    log(f"FFMPEG RC={cp.returncode}")
+    if cp.stderr:
+        log("FFMPEG STDERR tail: " + cp.stderr.splitlines()[-1])
+    if cp.returncode != 0:
+        raise RuntimeError("ffmpeg failed")
+    return out.name
 
-        # 取得
-        t = time.time()
-        if "url" in inp:
-            with requests.get(inp["url"], stream=True, timeout=60) as r:
-                r.raise_for_status()
-                with open(src_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024*1024):
-                        if chunk: f.write(chunk)
-        else:
-            with open(src_path, "wb") as f:
-                f.write(base64.b64decode(inp["file"]))
-        phase["download_sec"] = round(time.time()-t, 3)
+# ---------- ASR処理 ----------
+def transcribe(wav_path):
+    m = get_model()
+    t0 = time.time()
+    segments, info = m.transcribe(wav_path, language="ja", vad_filter=True)
+    log(f"ASR done in {time.time()-t0:.2f}s; dur={getattr(info,'duration',0):.2f}s")
 
-        # 変換（PIPEは使わない：DEVNULLで詰まり回避）
-        t = time.time()
-        wav_path = pathlib.Path(workdir) / "audio16k.wav"
-        subprocess.run(
-            ["ffmpeg","-y","-i",str(src_path),"-ar","16000","-ac","1","-vn",str(wav_path)],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        phase["ffmpeg_sec"] = round(time.time()-t, 3)
+    # SRT最小実装
+    def ts(sec):
+        ms = int(sec*1000)
+        h, ms = divmod(ms, 3600000); m, ms = divmod(ms, 60000); s, ms = divmod(ms, 1000)
+        return f"{h:02}:{m:02}:{s:02},{ms:03}"
+    buf = io.StringIO()
+    for i, seg in enumerate(segments, 1):
+        buf.write(f"{i}\n{ts(seg.start)} --> {ts(seg.end)}\n{seg.text.strip()}\n\n")
+    return buf.getvalue()
 
-        # 推論（GPU/compute_type情報を返す）
-        t = time.time()
-        model = get_model(model_size)
-        segments, info = model.transcribe(
-            str(wav_path),
-            language=None if lang=="auto" else lang,
-            beam_size=1, best_of=1,
-            vad_filter=False,
-            condition_on_previous_text=False
-        )
-        segs = list(segments)
-        phase["transcribe_sec"] = round(time.time()-t, 3)
+# ---------- RunPodハンドラ ----------
+def handler(event):
+    log(f"handler start; keys={list(event.keys())}")
+    try:
+        t0 = time.time()
+        src = decode_input(event.get("input", {}))
+        log("stage: input decoded")
 
-        # SRT
-        def ts(x):
-            ms = int((x-int(x))*1000); s = int(x)%60; m = (int(x)//60)%60; h = int(x)//3600
-            return f"{h:02}:{m:02}:{s:02},{ms:03}"
-        lines=[]
-        for i,s in enumerate(segs,1):
-            lines += [str(i), f"{ts(s.start)} --> {ts(s.end)}", f"spk1: {(s.text or '').strip()}", ""]
-        srt = "\n".join(lines)
+        wav = to_wav16k_mono(src)
+        log("stage: ffmpeg converted")
 
-        total_chars = sum(len((s.text or "").strip()) for s in segs)
-        total_dur = sum((s.end - s.start) for s in segs) or 1.0
+        srt = transcribe(wav)
+        log("stage: asr finished")
 
-        return {
-            "status": "success",
-            "srtContent": srt,
-            "healthCheck": {
-                "totalLines": len(segs),
-                "totalChars": total_chars,
-                "avgCps": round(total_chars/total_dur,2),
-                "detectedLanguage": getattr(info,"language", lang),
-                "device": "cuda",
-                "compute_type": getattr(model, "_compute_type", "n/a"),
-                "phase": phase,
-                "total_sec": round(time.time()-t0, 3)
-            }
-        }
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        log(f"handler success in {time.time()-t0:.2f}s")
+        return {"srtContent": srt}
+    except Exception as e:
+        log(f"handler error: {type(e).__name__}: {e}")
+        return {"error": str(e)}
 
-runpod.serverless.start({"handler": handler})
+# ---------- RunPod起動 ----------
+start({"handler": handler})
