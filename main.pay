@@ -1,106 +1,13 @@
-import os, io, time, base64, tempfile, subprocess, json, shutil
-from runpod.serverless import start
+import os, json, time
+import runpod
 
-def log(m): print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {m}", flush=True)
-
-# ffmpeg パス
-FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
-
-# WhisperX 準備（CPU）
-import torch, whisperx
-DEVICE = "cpu"
-BATCH_SIZE = 8
-COMPUTE_TYPE = "int8"   # CPU安定
-ASR_MODEL_NAME = os.environ.get("ASR_MODEL", "small")  # まず small
-
-asr_model = None
-align_model = None
-diarize_model = None
-
-def load_models():
-    global asr_model, align_model, diarize_model
-    if asr_model is None:
-        log(f"WhisperX ASR init: {ASR_MODEL_NAME} on {DEVICE}")
-        asr_model = whisperx.load_model(ASR_MODEL_NAME, DEVICE, compute_type=COMPUTE_TYPE)
-
-    if align_model is None:
-        log("WhisperX align init (Wav2Vec2)")
-        align_model, _ = whisperx.load_align_model(language_code="ja", device=DEVICE)
-
-    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
-    if hf_token and diarize_model is None:
-        log("WhisperX diarization init (pyannote) with HF token")
-        diarize_model = whisperx.DiarizationPipeline(use_auth_token=hf_token, device=DEVICE)
-    elif not hf_token:
-        log("No HF token; diarization will be skipped")
-
-def decode_input(input_dict):
-    if "file" in input_dict:
-        raw = base64.b64decode(input_dict["file"]); f = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
-        f.write(raw); f.close(); return f.name
-    elif "url" in input_dict:
-        url = input_dict["url"]; dst = tempfile.NamedTemporaryFile(delete=False, suffix=".bin"); dst.close()
-        cmd = ["curl", "-L", "-sS", url, "-o", dst.name, "--max-time", "60"]
-        subprocess.run(cmd, check=True); return dst.name
-    raise ValueError("input.file or input.url required")
-
-def to_wav16k_mono(src):
-    out = tempfile.NamedTemporaryFile(delete=False, suffix=".wav"); out.close()
-    cmd = [FFMPEG,"-hide_banner","-nostdin","-y","-i",src,"-ac","1","-ar","16000","-map_metadata","-1","-vn","-sn","-dn",out.name]
-    subprocess.run(cmd, check=True)
-    return out.name
-
-def to_srt(segments):
-    def ts(sec):
-        ms = int(sec*1000); h, ms = divmod(ms,3600000); m, ms = divmod(ms,60000); s, ms = divmod(ms,1000)
-        return f"{h:02}:{m:02}:{s:02},{ms:03}"
-    buf = io.StringIO()
-    for i, seg in enumerate(segments,1):
-        text = seg.get("text","").strip()
-        start = float(seg["start"]); end = float(seg["end"])
-        buf.write(f"{i}\n{ts(start)} --> {ts(end)}\n{text}\n\n")
-    return buf.getvalue()
+print("BOOT: starting container...")
 
 def handler(event):
-    try:
-        log("handler start")
-        load_models()
-        src = decode_input(event.get("input", {}))
-        wav = to_wav16k_mono(src)
+    print("HANDLER: got event", json.dumps(event)[:200])
+    # 何もせずに応答
+    return {"ok": True, "echo": event.get("input", {}), "ts": time.time()}
 
-        # 1) ASR
-        t0 = time.time()
-        audio = whisperx.load_audio(wav)
-        result = asr_model.transcribe(audio, batch_size=BATCH_SIZE, language="ja")
-        log(f"ASR done in {time.time()-t0:.2f}s")
-
-        # 2) word-level alignment
-        t1 = time.time()
-        result_aligned = whisperx.align(result["segments"], align_model, whisperx.load_audio(wav), DEVICE, return_char_alignments=False)
-        log(f"Align done in {time.time()-t1:.2f}s")
-
-        # 3) diarization (if token)
-        diar_json = {}
-        if diarize_model is not None:
-            t2 = time.time()
-            diar = diarize_model(wav)
-            diar_json = diar.to_json()
-            # speaker assignment to segments
-            result_segments = whisperx.assign_word_speakers(diar, result_aligned["segments"])
-            log(f"Diarization done in {time.time()-t2:.2f}s")
-        else:
-            result_segments = result_aligned["segments"]
-
-        srt = to_srt(result_segments)
-        return {
-            "srtContent": srt,
-            "diarization": diar_json,    # 空dictの可能性あり
-            "meta": {
-                "model": ASR_MODEL_NAME, "device": DEVICE, "compute_type": COMPUTE_TYPE
-            }
-        }
-    except Exception as e:
-        log(f"error: {e}")
-        return {"error": str(e)}
-
-start({"handler": handler})
+if __name__ == "__main__":
+    print("BOOT: calling runpod.serverless.start")
+    runpod.serverless.start({"handler": handler})
