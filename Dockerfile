@@ -5,6 +5,7 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HUB_DISABLE_TELEMETRY=1 \
     TOKENIZERS_PARALLELISM=false \
     PIP_DEFAULT_TIMEOUT=120
+    PYTHONFAULTHANDLER=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg curl ca-certificates git build-essential python3-dev libsndfile1 \
@@ -21,3 +22,4 @@ RUN set -ex; \
 
 COPY . .
 CMD ["python", "-u", "main.py"]
+
