@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HUB_DISABLE_TELEMETRY=1 \
     TOKENIZERS_PARALLELISM=false \
-    PIP_DEFAULT_TIMEOUT=120
+    PIP_DEFAULT_TIMEOUT=120 \
     PYTHONFAULTHANDLER=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,4 +22,5 @@ RUN set -ex; \
 
 COPY . .
 CMD ["python", "-u", "main.py"]
+
 
