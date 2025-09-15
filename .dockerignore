@@ -1,7 +1,4 @@
-.git
 __pycache__/
-*.wav
-*.mp3
-*.mp4
-*.srt
-.env
+.git
+node_modules/
+*.pyc
