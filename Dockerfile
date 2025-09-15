@@ -15,3 +15,6 @@ ENV PYTHONFAULTHANDLER=1
 
 # 起動時に環境情報→main.py 実行
 CMD ["bash","-lc","set -ex; pwd; ls -lah; which ffmpeg || true; ffmpeg -version || true; python -V; python -m pip freeze | egrep '^(torch|torchaudio|ctranslate2|faster-whisper|ffmpeg)' || true; python -u main.py"]
+
+# ...前半そのまま
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
