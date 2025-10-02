@@ -6,6 +6,7 @@ import tempfile
 import json
 import gc
 import torch
+import requests
 from pathlib import Path
 
 # 環境変数
@@ -16,7 +17,7 @@ COMPUTE_TYPE = "float16" if DEVICE == "cuda" else "int8"
 
 print(f"🚀 起動中... Device: {DEVICE}, Model: {MODEL_SIZE}")
 
-# モデルは最初に1回だけロード（高速化）
+# モデルは最初に1回だけロード
 model = None
 align_model = None
 align_metadata = None
@@ -50,7 +51,6 @@ def load_models():
 
 # サーバー起動時に1回だけロード
 load_models()
-
 
 def process_audio(audio_path, language="ja"):
     """
@@ -90,33 +90,62 @@ def process_audio(audio_path, language="ja"):
         print(f"❌ エラー: {str(e)}")
         raise
 
+def send_webhook(webhook_url, job_id, status, output=None, error=None):
+    """
+    Webhook URLに結果を送信
+    """
+    try:
+        payload = {
+            "id": job_id,
+            "status": status
+        }
+        
+        if status == "COMPLETED":
+            payload["output"] = output
+        elif status == "FAILED":
+            payload["error"] = error
+        
+        print(f"📤 Webhook送信中: {webhook_url}")
+        response = requests.post(
+            webhook_url,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.ok:
+            print(f"✅ Webhook送信成功")
+        else:
+            print(f"⚠️ Webhook送信失敗: {response.status_code}")
+            
+    except Exception as e:
+        print(f"❌ Webhook送信エラー: {str(e)}")
 
 def handler(event):
     """
     RunPod Serverlessのハンドラー関数
     """
+    job_id = event.get("id", "unknown")
+    webhook_url = None
+    
     try:
         job_input = event["input"]
         
-        # 入力取得（base64 or URL）
-        audio_data = job_input.get("file")  # base64
-        audio_url = job_input.get("url")    # URL
+        # 入力取得
+        audio_data = job_input.get("audio")  # base64（Workersから）
+        webhook_url = job_input.get("webhook")  # Webhook URL
         language = job_input.get("lang", "ja")
         
-        if not audio_data and not audio_url:
-            return {"ok": False, "error": "fileまたはurlが必要です"}
+        if not audio_data:
+            error_msg = "audioが必要です"
+            if webhook_url:
+                send_webhook(webhook_url, job_id, "FAILED", error=error_msg)
+            return {"ok": False, "error": error_msg}
         
         # 一時ファイル作成
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
-            
-            if audio_data:
-                # base64デコード
-                audio_bytes = base64.b64decode(audio_data)
-                tmp.write(audio_bytes)
-            else:
-                # URL取得は次のステップで実装
-                return {"ok": False, "error": "URL入力は未実装"}
+            audio_bytes = base64.b64decode(audio_data)
+            tmp.write(audio_bytes)
         
         print(f"📁 一時ファイル: {tmp_path}")
         
@@ -130,21 +159,32 @@ def handler(event):
         gc.collect()
         torch.cuda.empty_cache()
         
-        # レスポンス作成
-        return {
+        # 出力データ作成
+        output = {
+            "language": language,
             "ok": True,
-            "segments": result.get("segments", []),
-            "language": language
+            "segments": result.get("segments", [])
         }
         
+        # Webhook送信
+        if webhook_url:
+            send_webhook(webhook_url, job_id, "COMPLETED", output=output)
+        
+        # レスポンス（非同期の場合は使われない）
+        return output
+        
     except Exception as e:
-        print(f"❌ ハンドラーエラー: {str(e)}")
+        error_msg = str(e)
+        print(f"❌ ハンドラーエラー: {error_msg}")
+        
+        # エラーでもWebhook送信
+        if webhook_url:
+            send_webhook(webhook_url, job_id, "FAILED", error=error_msg)
+        
         return {
             "ok": False,
-            "error": str(e)
+            "error": error_msg
         }
-
 
 # RunPodサーバー起動
 runpod.serverless.start({"handler": handler})
-
