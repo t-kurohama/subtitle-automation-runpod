@@ -141,10 +141,13 @@ def handler(event):
                 send_webhook(webhook_url, job_id, "FAILED", error=error_msg)
             return {"ok": False, "error": error_msg}
         
+        # base64文字列のクリーンアップ（改行・空白削除）
+        audio_data_clean = audio_data.replace('\n', '').replace('\r', '').replace(' ', '')
+        
         # 一時ファイル作成
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
-            audio_bytes = base64.b64decode(audio_data)
+            audio_bytes = base64.b64decode(audio_data_clean)
             tmp.write(audio_bytes)
         
         print(f"📁 一時ファイル: {tmp_path}")
