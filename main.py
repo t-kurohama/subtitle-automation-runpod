@@ -130,25 +130,28 @@ def handler(event):
     try:
         job_input = event["input"]
         
-        # 入力取得
-        audio_data = job_input.get("audio")  # base64（Workersから）
-        webhook_url = job_input.get("webhook")  # Webhook URL
+        # 入力取得（URL方式）
+        audio_url = job_input.get("audio_url")  # ← URLで受け取る
+        webhook_url = job_input.get("webhook")
         language = job_input.get("lang", "ja")
         
-        if not audio_data:
-            error_msg = "audioが必要です"
+        if not audio_url:
+            error_msg = "audio_urlが必要です"
             if webhook_url:
                 send_webhook(webhook_url, job_id, "FAILED", error=error_msg)
             return {"ok": False, "error": error_msg}
         
-        # base64文字列のクリーンアップ（改行・空白削除）
-        audio_data_clean = audio_data.replace('\n', '').replace('\r', '').replace(' ', '')
+        # URLから音声ダウンロード
+        print(f"📥 音声ダウンロード中: {audio_url}")
+        audio_response = requests.get(audio_url, timeout=120)
+        
+        if not audio_response.ok:
+            raise Exception(f"音声ダウンロード失敗: {audio_response.status_code}")
         
         # 一時ファイル作成
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
-            audio_bytes = base64.b64decode(audio_data_clean)
-            tmp.write(audio_bytes)
+            tmp.write(audio_response.content)
         
         print(f"📁 一時ファイル: {tmp_path}")
         
