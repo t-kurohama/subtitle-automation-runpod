@@ -90,7 +90,7 @@ def process_audio(audio_path, language="ja"):
         print(f"❌ エラー: {str(e)}")
         raise
 
-def send_webhook(webhook_url, job_id, status, output=None, error=None):
+def send_webhook(webhook_url, job_id, status, job_input=None, output=None, error=None):
     """
     Webhook URLに結果を送信
     """
@@ -101,11 +101,16 @@ def send_webhook(webhook_url, job_id, status, output=None, error=None):
         }
         
         if status == "COMPLETED":
+            payload["input"] = job_input
             payload["output"] = output
         elif status == "FAILED":
+            payload["input"] = job_input
             payload["error"] = error
         
         print(f"📤 Webhook送信中: {webhook_url}")
+        if job_input:
+            print(f"📋 Input内容: client={job_input.get('client')}, vid={job_input.get('vid')}")
+        
         response = requests.post(
             webhook_url,
             json=payload,
@@ -131,14 +136,18 @@ def handler(event):
         job_input = event["input"]
         
         # 入力取得（URL方式）
-        audio_url = job_input.get("audio_url")  # ← URLで受け取る
+        audio_url = job_input.get("audio_url")
         webhook_url = job_input.get("webhook")
         language = job_input.get("lang", "ja")
+        client = job_input.get("client", "unknown")
+        vid = job_input.get("vid", "unknown")
+        
+        print(f"🎬 処理開始: client={client}, vid={vid}")
         
         if not audio_url:
             error_msg = "audio_urlが必要です"
             if webhook_url:
-                send_webhook(webhook_url, job_id, "FAILED", error=error_msg)
+                send_webhook(webhook_url, job_id, "FAILED", job_input=job_input, error=error_msg)
             return {"ok": False, "error": error_msg}
         
         # URLから音声ダウンロード
@@ -174,7 +183,7 @@ def handler(event):
         
         # Webhook送信
         if webhook_url:
-            send_webhook(webhook_url, job_id, "COMPLETED", output=output)
+            send_webhook(webhook_url, job_id, "COMPLETED", job_input=job_input, output=output)
         
         # レスポンス（非同期の場合は使われない）
         return output
@@ -185,7 +194,7 @@ def handler(event):
         
         # エラーでもWebhook送信
         if webhook_url:
-            send_webhook(webhook_url, job_id, "FAILED", error=error_msg)
+            send_webhook(webhook_url, job_id, "FAILED", job_input=job_input, error=error_msg)
         
         return {
             "ok": False,
