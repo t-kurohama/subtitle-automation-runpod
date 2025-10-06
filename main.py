@@ -63,7 +63,6 @@ def process_audio(audio_path, language="ja", num_speakers=2):
             audio_path, 
             language=language, 
             batch_size=16,
-            vad_filter=True
         )
         
         # 2️⃣ 単語レベルのタイミング補正
