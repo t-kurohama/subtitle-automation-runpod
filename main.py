@@ -208,3 +208,4 @@ def handler(event):
 
 # RunPodサーバー起動
 runpod.serverless.start({"handler": handler})
+
