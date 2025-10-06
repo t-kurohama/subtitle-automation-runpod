@@ -52,14 +52,19 @@ def load_models():
 # サーバー起動時に1回だけロード
 load_models()
 
-def process_audio(audio_path, language="ja"):
+def process_audio(audio_path, language="ja", num_speakers=2):
     """
     音声ファイルを処理して、文字起こし+話者分離
     """
     try:
         # 1️⃣ 文字起こし
         print("🎤 文字起こし中...")
-        result = model.transcribe(audio_path, language=language, batch_size=16)
+        result = model.transcribe(
+            audio_path, 
+            language=language, 
+            batch_size=16,
+            vad_filter=True
+        )
         
         # 2️⃣ 単語レベルのタイミング補正
         print("⏱️ 単語タイミング補正中...")
@@ -72,12 +77,12 @@ def process_audio(audio_path, language="ja"):
             return_char_alignments=False
         )
         
-        # 3️⃣ 話者分離（2人固定）
-        print("👥 話者分離中...")
+        # 3️⃣ 話者分離（人数指定）
+        print(f"👥 話者分離中... (話者数: {num_speakers}人)")
         diarize_segments = diarize_model(
             audio_path,
-            min_speakers=2,
-            max_speakers=2
+            min_speakers=num_speakers,
+            max_speakers=num_speakers
         )
         
         # 4️⃣ 話者情報を単語に割り当て
@@ -109,7 +114,7 @@ def send_webhook(webhook_url, job_id, status, job_input=None, output=None, error
         
         print(f"📤 Webhook送信中: {webhook_url}")
         if job_input:
-            print(f"📋 Input内容: client={job_input.get('client')}, vid={job_input.get('vid')}")
+            print(f"📋 Input内容: client={job_input.get('client')}, vid={job_input.get('vid')}, speakers={job_input.get('num_speakers')}")
         
         response = requests.post(
             webhook_url,
@@ -141,8 +146,9 @@ def handler(event):
         language = job_input.get("lang", "ja")
         client = job_input.get("client", "unknown")
         vid = job_input.get("vid", "unknown")
+        num_speakers = int(job_input.get("num_speakers", 2))
         
-        print(f"🎬 処理開始: client={client}, vid={vid}")
+        print(f"🎬 処理開始: client={client}, vid={vid}, speakers={num_speakers}人")
         
         if not audio_url:
             error_msg = "audio_urlが必要です"
@@ -165,7 +171,7 @@ def handler(event):
         print(f"📁 一時ファイル: {tmp_path}")
         
         # 音声処理実行
-        result = process_audio(tmp_path, language)
+        result = process_audio(tmp_path, language, num_speakers)
         
         # 一時ファイル削除
         os.unlink(tmp_path)
