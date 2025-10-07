@@ -48,6 +48,13 @@ def load_models():
     )
     
     print("✅ 全モデルロード完了！")
+    
+    # ↓ バージョン確認用（追加）
+    import whisperx
+    import inspect
+    print(f"📊 WhisperX version: {whisperx.__version__}")
+    sig = inspect.signature(model.transcribe)
+    print(f"📊 transcribe parameters: {sig}")
 
 # サーバー起動時に1回だけロード
 load_models()
@@ -62,7 +69,7 @@ def process_audio(audio_path, language="ja", num_speakers=2):
         result = model.transcribe(
             audio_path, 
             language=language, 
-            batch_size=16,
+            batch_size=16
         )
         
         # 2️⃣ 単語レベルのタイミング補正
@@ -208,4 +215,3 @@ def handler(event):
 
 # RunPodサーバー起動
 runpod.serverless.start({"handler": handler})
-
