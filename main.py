@@ -49,8 +49,7 @@ def load_models():
     
     print("✅ 全モデルロード完了！")
     
-    # ↓ バージョン確認用（追加）
-    import whisperx
+    # ↓ バージョン確認用（修正版）
     import inspect
     print(f"📊 WhisperX version: {whisperx.__version__}")
     sig = inspect.signature(model.transcribe)
