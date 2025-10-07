@@ -51,7 +51,14 @@ def load_models():
     
     # ↓ バージョン確認用（修正版）
     import inspect
-    print(f"📊 WhisperX version: {whisperx.__version__}")
+    try:
+        # バージョン取得を試みる
+        version = getattr(whisperx, '__version__', 'version unavailable')
+        print(f"📊 WhisperX version: {version}")
+    except:
+        print(f"📊 WhisperX version: unavailable")
+    
+    # transcribeのパラメータ確認
     sig = inspect.signature(model.transcribe)
     print(f"📊 transcribe parameters: {sig}")
 
