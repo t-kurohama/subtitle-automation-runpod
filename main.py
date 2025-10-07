@@ -8,6 +8,7 @@ import gc
 import torch
 import requests
 from pathlib import Path
+from pyannote.audio import Pipeline
 
 # 環境変数
 HF_TOKEN = os.environ.get("HF_TOKEN")
@@ -42,7 +43,6 @@ def load_models():
     )
     
     print("📥 話者分離モデルをロード中...")
-    from pyannote.audio import Pipeline
     diarize_model = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
         use_auth_token=HF_TOKEN
@@ -106,9 +106,7 @@ def process_audio(audio_path, language="ja", num_speakers=2):
         diarization = diarize_model(
             audio_path,
             min_speakers=num_speakers,
-            max_speakers=num_speakers,
-            segmentation_onset=0.3,      # 短い発言も検出
-            segmentation_offset=0.5,     # セグメント終了の閾値
+            max_speakers=num_speakers
         )
         
         # 4️⃣ 話者情報を単語に割り当て（独自実装）
