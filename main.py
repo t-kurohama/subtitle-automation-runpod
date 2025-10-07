@@ -42,28 +42,40 @@ def load_models():
     )
     
     print("📥 話者分離モデルをロード中...")
-    diarize_model = whisperx.DiarizationPipeline(
-        use_auth_token=HF_TOKEN,
-        device=DEVICE
+    from pyannote.audio import Pipeline
+    diarize_model = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-3.1",
+        use_auth_token=HF_TOKEN
     )
+    diarize_model.to(torch.device(DEVICE))
     
     print("✅ 全モデルロード完了！")
-    
-    # ↓ バージョン確認用（修正版）
-    import inspect
-    try:
-        # バージョン取得を試みる
-        version = getattr(whisperx, '__version__', 'version unavailable')
-        print(f"📊 WhisperX version: {version}")
-    except:
-        print(f"📊 WhisperX version: unavailable")
-    
-    # transcribeのパラメータ確認
-    sig = inspect.signature(model.transcribe)
-    print(f"📊 transcribe parameters: {sig}")
 
 # サーバー起動時に1回だけロード
 load_models()
+
+def find_speaker_at_time(diarization, time):
+    """
+    指定時刻の話者を探す
+    """
+    for turn, _, speaker in diarization.itertracks(yield_label=True):
+        if turn.start <= time <= turn.end:
+            return speaker
+    return "SPEAKER_00"  # デフォルト
+
+def merge_transcription_and_diarization(transcription, diarization):
+    """
+    WhisperXの結果とpyannoteの結果を合体
+    """
+    segments = transcription.get("segments", [])
+    
+    for segment in segments:
+        # セグメントの中間時刻で話者判定
+        mid_time = (segment["start"] + segment["end"]) / 2
+        speaker = find_speaker_at_time(diarization, mid_time)
+        segment["speaker"] = speaker
+    
+    return transcription
 
 def process_audio(audio_path, language="ja", num_speakers=2):
     """
@@ -89,22 +101,26 @@ def process_audio(audio_path, language="ja", num_speakers=2):
             return_char_alignments=False
         )
         
-        # 3️⃣ 話者分離（人数指定）
+        # 3️⃣ 話者分離（最適化パラメータ付き）
         print(f"👥 話者分離中... (話者数: {num_speakers}人)")
-        diarize_segments = diarize_model(
+        diarization = diarize_model(
             audio_path,
             min_speakers=num_speakers,
-            max_speakers=num_speakers
+            max_speakers=num_speakers,
+            segmentation_onset=0.3,      # 短い発言も検出
+            segmentation_offset=0.5,     # セグメント終了の閾値
         )
         
-        # 4️⃣ 話者情報を単語に割り当て
+        # 4️⃣ 話者情報を単語に割り当て（独自実装）
         print("🔗 話者情報を結合中...")
-        result = whisperx.assign_word_speakers(diarize_segments, result)
+        result = merge_transcription_and_diarization(result, diarization)
         
         return result
         
     except Exception as e:
         print(f"❌ エラー: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise
 
 def send_webhook(webhook_url, job_id, status, job_input=None, output=None, error=None):
