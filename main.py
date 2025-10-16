@@ -33,7 +33,9 @@ def load_models():
         MODEL_SIZE, 
         device=DEVICE, 
         compute_type=COMPUTE_TYPE,
-        language="ja"
+        language="ja",
+        download_root=None,
+        vad_onset=None
     )
     
     print("📥 アライメントモデルをロード中...")
@@ -222,7 +224,7 @@ def handler(event):
         
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ ハンドラーエラー: {error_msg}")
+        print(f("❌ ハンドラーエラー: {error_msg}")
         
         # エラーでもWebhook送信
         if webhook_url:
