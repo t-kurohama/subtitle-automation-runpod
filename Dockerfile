@@ -6,15 +6,17 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Pythonパッケージをインストール
+# Pythonパッケージをインストール（依存関係のバージョンも固定）
 RUN pip install --no-cache-dir \
+    "numpy<2.0" \
+    "pyannote.core==5.0.0" \
+    "pyannote.database==5.1.0" \
+    "pyannote.metrics==3.2.1" \
+    "pyannote.pipeline==3.0.1" \
     runpod==1.7.0 \
     requests \
     whisperx==3.1.1 \
     pyannote.audio==3.1.1
-
-# NumPyを強制的にダウングレード（最後に実行）
-RUN pip install --no-cache-dir --force-reinstall "numpy<2.0"
 
 # アプリケーションファイルをコピー
 COPY handler.py /app/handler.py
