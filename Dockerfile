@@ -1,21 +1,24 @@
 FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
 
-# 必要なシステムパッケージ
+# 必要なシステムパッケージをインストール
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Pythonパッケージ
+# Pythonパッケージをインストール
 RUN pip install --no-cache-dir \
+    "numpy<2.0" \
     runpod==1.7.0 \
     requests \
     whisperx==3.1.1 \
     pyannote.audio==3.1.1
 
-# アプリケーションコピー
+# アプリケーションファイルをコピー
 COPY handler.py /app/handler.py
 
+# 作業ディレクトリを設定
 WORKDIR /app
 
+# アプリケーションを起動
 CMD ["python", "handler.py"]
