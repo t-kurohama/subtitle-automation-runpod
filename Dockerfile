@@ -1,22 +1,21 @@
-# CUDA対応のPyTorchベースイメージ
-FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
 
-# 作業ディレクトリ
-WORKDIR /app
-
-# システムパッケージをインストール
+# 必要なシステムパッケージ
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Pythonパッケージをインストール
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Pythonパッケージ
+RUN pip install --no-cache-dir \
+    runpod==1.7.0 \
+    requests \
+    whisperx==3.1.1 \
+    pyannote.audio==3.1.1
 
-# メインスクリプトをコピー
-COPY main.py .
+# アプリケーションコピー
+COPY handler.py /app/handler.py
 
-# RunPodのエントリーポイント
-CMD ["python", "-u", "main.py"]
+WORKDIR /app
+
+CMD ["python", "handler.py"]
