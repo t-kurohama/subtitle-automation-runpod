@@ -6,9 +6,11 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Pythonパッケージをインストール
+# NumPyを先にインストール（重要！）
+RUN pip install --no-cache-dir "numpy<2.0"
+
+# その他のPythonパッケージをインストール
 RUN pip install --no-cache-dir \
-    "numpy<2.0" \
     runpod==1.7.0 \
     requests \
     whisperx==3.1.1 \
