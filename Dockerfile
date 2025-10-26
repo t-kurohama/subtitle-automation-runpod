@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir \
     whisperx==3.1.1 \
     pyannote.audio==3.1.1
 
+# キャッシュ無効化
+RUN echo "build-$(date +%s)" > /tmp/build_timestamp
+
 # アプリケーションファイルをコピー
 COPY handler.py /app/handler.py
 
