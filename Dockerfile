@@ -25,5 +25,4 @@ COPY handler.py /app/handler.py
 WORKDIR /app
 
 # アプリケーションを起動
-ENTRYPOINT ["python", "handler.py"]
-CMD []
+CMD ["python", "handler.py"]
