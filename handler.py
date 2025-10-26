@@ -1,5 +1,4 @@
 print("🎬 handler.py starting...")
-
 import os
 import torch
 print(f"✅ Python OK")
@@ -25,18 +24,11 @@ try:
         "large-v3",
         device=device,
         compute_type=compute_type,
-        language="ja",
-        asr_options={
-            "multilingual": False,
-            "max_new_tokens": None,
-            "clip_timestamps": "0",
-            "hallucination_silence_threshold": None
-        }
+        language="ja"
     )
     print("✅ WhisperX loaded successfully!")
 except Exception as e:
     print(f"❌ WhisperX load failed: {str(e)}")
-    # それでも続行して他のモデルをテスト
     model = None
 
 # アライメントモデルロード
