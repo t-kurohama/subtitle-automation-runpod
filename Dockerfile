@@ -6,7 +6,15 @@ WORKDIR /app
 
 # システムパッケージをインストール
 RUN apt-get update && apt-get install -y \
+    pkg-config \
     ffmpeg \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
